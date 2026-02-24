@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+import urllib.request
 from flask import Flask, request, jsonify, render_template
 
 from recomendar_api import (
@@ -20,6 +21,16 @@ METRICS_OLD_PATH = os.path.join(ART_DIR, "metrics.json")
 CATALOGO_PATH = os.path.join(BASE_DIR, "catalogo_itens.csv")
 CIDADES_PATH = os.path.join(BASE_DIR, "dados_sinteticos_10000.csv")  # opcional
 
+
+def ensure_model_downloaded(model_path: str, model_url: str | None):
+    if os.path.exists(model_path):
+        return
+    if not model_url:
+        return
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    print(f"Baixando modelo de {model_url} para {model_path} ...")
+    urllib.request.urlretrieve(model_url, model_path)
+    print("Download concluído.")
 
 def _load_json(path):
     if not os.path.exists(path):
@@ -55,8 +66,12 @@ def load_cities():
 
 app = Flask(__name__)
 
+MODEL_URL = os.environ.get("MODEL_URL")  # Render/produção
+ensure_model_downloaded(MODEL_FAST_PATH, MODEL_URL)
+
 MODEL_PATH = choose_model_path()
 ART = load_artifacts(MODEL_PATH) if MODEL_PATH else None
+
 
 CAT = load_catalog(CATALOGO_PATH) if os.path.exists(CATALOGO_PATH) else None
 CAT_MAP = build_catalog_map(CAT) if CAT is not None else {}
