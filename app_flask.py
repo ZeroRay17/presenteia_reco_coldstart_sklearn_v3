@@ -22,14 +22,7 @@ CATALOGO_PATH = os.path.join(BASE_DIR, "catalogo_itens.csv")
 CIDADES_PATH = os.path.join(BASE_DIR, "dados_sinteticos_10000.csv")  # opcional
 
 
-# -----------------------------
-# Utilitários
-# -----------------------------
 def ensure_model_downloaded(model_path: str, model_url: str | None) -> bool:
-    """
-    Baixa o modelo do URL (ex: GitHub Release) para artifacts/ antes de carregar.
-    Retorna True se o arquivo existir ao final.
-    """
     if os.path.exists(model_path):
         return True
     if not model_url:
@@ -79,45 +72,32 @@ def load_cities() -> list[str]:
         return fallback
 
 
-# -----------------------------
-# App
-# -----------------------------
 app = Flask(__name__)
 
-# 1) Baixa modelo no startup (Render/produção)
-MODEL_URL = os.environ.get("MODEL_URL")  # setar no Render
+# baixa modelo no deploy
+MODEL_URL = os.environ.get("MODEL_URL")
 ensure_model_downloaded(MODEL_FAST_PATH, MODEL_URL)
 
-# 2) Carrega modelo (fast preferido)
 MODEL_PATH = choose_model_path()
 ART = load_artifacts(MODEL_PATH) if MODEL_PATH else None
 
-# 3) Carrega catálogo e cidade
 CAT = load_catalog(CATALOGO_PATH) if os.path.exists(CATALOGO_PATH) else None
 CAT_MAP = build_catalog_map(CAT) if CAT is not None else {}
 
 METRICS = _load_json(METRICS_FAST_PATH) or _load_json(METRICS_OLD_PATH)
 CITIES = load_cities()
 
-# 4) Index vetorial (se falhar, não derruba o serviço)
 VECTOR_SEARCH = None
 if ART is not None and CAT_MAP:
     try:
         classes = get_model_classes(ART)
-        VECTOR_SEARCH = SemanticVectorSearch.from_catalog_map(
-            classes=classes,
-            catalog_map=CAT_MAP,
-            n_components=128,   # se startup ficar pesado, reduza para 64
-        )
-        print("Vector search index pronto.")
+        VECTOR_SEARCH = SemanticVectorSearch.from_catalog_map(classes=classes, catalog_map=CAT_MAP)
+        print("Vector search (low-RAM hashing) pronto.")
     except Exception as e:
         VECTOR_SEARCH = None
-        print(f"Falha ao criar vector search index: {e}")
+        print(f"Falha ao criar vector search: {e}")
 
 
-# -----------------------------
-# Rotas
-# -----------------------------
 @app.get("/")
 def index():
     return render_template(
@@ -162,7 +142,6 @@ def recommend():
         return jsonify({"ok": False, "error": "invalid types. idade=int, renda=float, sexo/cidade=str"}), 400
 
     topn = int(payload.get("topn", 10))
-
     apply_sex_rule = bool(payload.get("apply_sex_rule", True))
     apply_age_rule = bool(payload.get("apply_age_rule", True))
     apply_renda_rule = bool(payload.get("apply_renda_rule", False))
@@ -216,5 +195,4 @@ def recommend():
 
 
 if __name__ == "__main__":
-    # dev local (no Render, quem roda é o gunicorn)
     app.run(host="0.0.0.0", port=5000, debug=True)
