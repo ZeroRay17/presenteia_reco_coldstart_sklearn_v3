@@ -1,7 +1,7 @@
 import os
 import json
-import pandas as pd
 import urllib.request
+import pandas as pd
 from flask import Flask, request, jsonify, render_template
 
 from recomendar_api import (
@@ -22,17 +22,32 @@ CATALOGO_PATH = os.path.join(BASE_DIR, "catalogo_itens.csv")
 CIDADES_PATH = os.path.join(BASE_DIR, "dados_sinteticos_10000.csv")  # opcional
 
 
-def ensure_model_downloaded(model_path: str, model_url: str | None):
+# -----------------------------
+# Utilitários
+# -----------------------------
+def ensure_model_downloaded(model_path: str, model_url: str | None) -> bool:
+    """
+    Baixa o modelo do URL (ex: GitHub Release) para artifacts/ antes de carregar.
+    Retorna True se o arquivo existir ao final.
+    """
     if os.path.exists(model_path):
-        return
+        return True
     if not model_url:
-        return
-    os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    print(f"Baixando modelo de {model_url} para {model_path} ...")
-    urllib.request.urlretrieve(model_url, model_path)
-    print("Download concluído.")
+        print("MODEL_URL não definido; seguindo sem baixar modelo.")
+        return False
 
-def _load_json(path):
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    try:
+        print(f"Baixando modelo de {model_url} para {model_path} ...")
+        urllib.request.urlretrieve(model_url, model_path)
+        print("Download concluído.")
+        return os.path.exists(model_path)
+    except Exception as e:
+        print(f"Falha ao baixar modelo: {e}")
+        return False
+
+
+def _load_json(path: str):
     if not os.path.exists(path):
         return None
     try:
@@ -42,7 +57,7 @@ def _load_json(path):
         return None
 
 
-def choose_model_path():
+def choose_model_path() -> str | None:
     if os.path.exists(MODEL_FAST_PATH):
         return MODEL_FAST_PATH
     if os.path.exists(MODEL_OLD_PATH):
@@ -50,7 +65,7 @@ def choose_model_path():
     return None
 
 
-def load_cities():
+def load_cities() -> list[str]:
     fallback = ["São Paulo - SP", "Rio de Janeiro - RJ", "Belo Horizonte - MG", "Curitiba - PR"]
     if not os.path.exists(CIDADES_PATH):
         return fallback
@@ -64,27 +79,45 @@ def load_cities():
         return fallback
 
 
+# -----------------------------
+# App
+# -----------------------------
 app = Flask(__name__)
 
-MODEL_URL = os.environ.get("MODEL_URL")  # Render/produção
+# 1) Baixa modelo no startup (Render/produção)
+MODEL_URL = os.environ.get("MODEL_URL")  # setar no Render
 ensure_model_downloaded(MODEL_FAST_PATH, MODEL_URL)
 
+# 2) Carrega modelo (fast preferido)
 MODEL_PATH = choose_model_path()
 ART = load_artifacts(MODEL_PATH) if MODEL_PATH else None
 
-
+# 3) Carrega catálogo e cidade
 CAT = load_catalog(CATALOGO_PATH) if os.path.exists(CATALOGO_PATH) else None
 CAT_MAP = build_catalog_map(CAT) if CAT is not None else {}
 
 METRICS = _load_json(METRICS_FAST_PATH) or _load_json(METRICS_OLD_PATH)
 CITIES = load_cities()
 
+# 4) Index vetorial (se falhar, não derruba o serviço)
 VECTOR_SEARCH = None
 if ART is not None and CAT_MAP:
-    classes = get_model_classes(ART)
-    VECTOR_SEARCH = SemanticVectorSearch.from_catalog_map(classes=classes, catalog_map=CAT_MAP, n_components=128)
+    try:
+        classes = get_model_classes(ART)
+        VECTOR_SEARCH = SemanticVectorSearch.from_catalog_map(
+            classes=classes,
+            catalog_map=CAT_MAP,
+            n_components=128,   # se startup ficar pesado, reduza para 64
+        )
+        print("Vector search index pronto.")
+    except Exception as e:
+        VECTOR_SEARCH = None
+        print(f"Falha ao criar vector search index: {e}")
 
 
+# -----------------------------
+# Rotas
+# -----------------------------
 @app.get("/")
 def index():
     return render_template(
@@ -113,7 +146,7 @@ def health():
 @app.post("/recommend")
 def recommend():
     if ART is None:
-        return jsonify({"ok": False, "error": "model not loaded. Train first."}), 500
+        return jsonify({"ok": False, "error": "model not loaded. Check MODEL_URL / artifacts."}), 500
 
     payload = request.get_json(silent=True) or {}
     missing = [k for k in ["idade", "sexo", "cidade", "renda"] if k not in payload]
@@ -163,7 +196,7 @@ def recommend():
 
     note = None
     if q and len(recs) == 0:
-        note = "Nenhum item semelhante foi encontrado para a pesquisa. Tente um termo diferente."
+        note = "Nenhum item semelhante foi encontrado para a pesquisa. Tente outro termo."
 
     return jsonify({
         "ok": True,
@@ -183,4 +216,5 @@ def recommend():
 
 
 if __name__ == "__main__":
+    # dev local (no Render, quem roda é o gunicorn)
     app.run(host="0.0.0.0", port=5000, debug=True)
