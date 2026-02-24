@@ -1,0 +1,7 @@
+pre {
+  background: #f7f7f7;
+  border-radius: 10px;
+  padding: 12px;
+  overflow: auto;
+}
+details summary { cursor: pointer; }

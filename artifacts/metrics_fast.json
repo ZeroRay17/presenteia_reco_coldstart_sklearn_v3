@@ -1,0 +1,12 @@
+{
+  "model_kind": "sklearn_sgd_logloss_hashing",
+  "train_rows_seen": 600000,
+  "holdout_rows": 239997,
+  "holdout_accuracy": 0.17419801080846845,
+  "holdout_top3_accuracy": 0.31433309583036456,
+  "holdout_top5_accuracy": 0.4163468710025542,
+  "n_classes": 50,
+  "hash_dim": 524288,
+  "epochs": 1,
+  "alpha": 1e-06
+}

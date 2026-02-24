@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+artifacts/*.joblib
+dados_sinteticos_*.csv
+dados_sinteticos_*.csv.gz
+tmp_*.csv

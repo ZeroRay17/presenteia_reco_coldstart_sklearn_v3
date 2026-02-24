@@ -1,0 +1,51 @@
+item,preco_ref,min_idade,max_idade,allowed_sexo,renda_min,renda_max,tags
+Brinquedo educativo (blocos),120,3,8,U,0,8000,kids|toy
+Boneca colecionável,180,4,12,F,0,12000,kids|toy
+Carrinho controle remoto,220,5,14,M,0,15000,kids|toy
+Jogo de tabuleiro família,160,8,70,U,0,20000,family|game
+Livro infantil ilustrado,60,2,10,U,0,15000,kids|book
+Lego compatível (kit),250,6,16,U,0,25000,kids|toy
+Headset gamer,280,12,35,U,1200,25000,gaming|tech
+Mouse gamer,150,12,35,U,1200,25000,gaming|tech
+Teclado mecânico,320,13,40,U,1500,30000,gaming|tech
+Suporte para notebook,110,13,70,U,0,30000,work|accessory
+Mochila para notebook,220,13,60,U,800,25000,work|accessory
+Capa e película (smartphone),55,10,90,U,0,50000,phone|accessory
+Fone bluetooth,190,13,60,U,800,30000,audio|tech
+Caixa de som bluetooth,230,13,80,U,800,30000,audio|tech
+Smartwatch básico,350,14,65,U,1500,40000,wearable|tech
+Perfume casual,220,18,60,U,1500,30000,beauty
+Kit barba (óleo + pente),140,16,60,M,1000,25000,grooming
+Kit skincare básico,160,14,55,F,1000,25000,beauty
+Maquiagem (paleta),140,14,55,F,800,25000,beauty
+Relógio clássico,480,18,70,M,2000,60000,style
+Bolsa casual,260,16,60,F,1200,40000,style
+Carteira de couro,180,16,70,M,1000,40000,style
+Jaqueta corta-vento,180,13,45,U,1200,30000,fashion
+Camisa social,160,18,65,M,1200,40000,fashion
+Vestido casual,190,16,55,F,1200,40000,fashion
+Tênis corrida,350,14,55,U,1500,35000,sports
+Bola de futebol,120,6,35,U,0,20000,sports
+Kit yoga (tapete),180,16,60,F,1000,30000,sports|wellness
+Garrafa térmica,120,13,80,U,0,30000,lifestyle
+Air fryer (3-4L),380,18,70,U,1500,40000,home|kitchen
+Cafeteira elétrica,320,18,75,U,1500,40000,home|kitchen
+Panela elétrica,280,18,75,U,1200,40000,home|kitchen
+Livro de culinária,85,18,80,U,0,25000,book|home
+Vinho tinto (750ml),90,20,75,U,2500,60000,food|drink
+Chocolate premium (caixa),80,12,90,U,0,30000,gift|food
+Buquê de flores (entrega local),160,18,90,F,1200,50000,gift
+Pelúcia grande,150,6,30,F,0,25000,gift|toy
+Kit café gourmet,180,20,80,U,1800,60000,gift|food
+Assinatura streaming (3 meses),90,12,60,U,800,30000,digital
+Gift card (R$100),100,10,90,U,0,80000,digital|gift
+Power bank 10.000mAh,140,13,70,U,800,30000,tech
+Luminária de mesa LED,120,13,80,U,0,30000,home|work
+Jogo de ferramentas básico,190,18,75,M,1000,40000,home|diy
+Conjunto de taças,220,22,80,U,2500,70000,home
+Kit churrasco,260,20,75,M,1800,70000,home|food
+Planta decorativa,140,18,80,F,1200,50000,home|gift
+Tablet básico,950,10,65,U,2500,80000,tech
+Kindle e-reader,650,16,80,U,2000,80000,tech|book
+Curso online (tema profissional),400,18,60,U,2000,80000,education
+Massagem/SPA (voucher),350,18,70,F,2500,80000,experience

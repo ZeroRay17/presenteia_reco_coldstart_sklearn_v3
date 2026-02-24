@@ -1,0 +1,9 @@
+{
+  "model_kind": "sklearn_logreg_saga",
+  "test_accuracy": 0.0905,
+  "top3_accuracy": 0.2165,
+  "top5_accuracy": 0.315,
+  "n_classes": 50,
+  "n_train": 8000,
+  "n_test": 2000
+}
