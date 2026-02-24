@@ -1,6 +1,7 @@
 import os
 import json
 import urllib.request
+import threading
 import pandas as pd
 from flask import Flask, request, jsonify, render_template
 
@@ -21,25 +22,26 @@ METRICS_OLD_PATH = os.path.join(ART_DIR, "metrics.json")
 CATALOGO_PATH = os.path.join(BASE_DIR, "catalogo_itens.csv")
 CIDADES_PATH = os.path.join(BASE_DIR, "dados_sinteticos_10000.csv")  # opcional
 
+app = Flask(__name__)
 
-def ensure_model_downloaded(model_path: str, model_url: str | None) -> bool:
-    if os.path.exists(model_path):
-        return True
-    if not model_url:
-        print("MODEL_URL não definido; seguindo sem baixar modelo.")
-        return False
+# -----------------------------
+# Estado global (lazy init)
+# -----------------------------
+INIT_LOCK = threading.Lock()
+INIT_DONE = False
+INIT_ERROR = None
 
-    os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    try:
-        print(f"Baixando modelo de {model_url} para {model_path} ...")
-        urllib.request.urlretrieve(model_url, model_path)
-        print("Download concluído.")
-        return os.path.exists(model_path)
-    except Exception as e:
-        print(f"Falha ao baixar modelo: {e}")
-        return False
+MODEL_PATH = None
+ART = None
+CAT_MAP = {}
+METRICS = None
+CITIES = []
+VECTOR_SEARCH = None
 
 
+# -----------------------------
+# Helpers
+# -----------------------------
 def _load_json(path: str):
     if not os.path.exists(path):
         return None
@@ -58,6 +60,23 @@ def choose_model_path() -> str | None:
     return None
 
 
+def ensure_model_downloaded(model_path: str, model_url: str | None) -> bool:
+    if os.path.exists(model_path):
+        return True
+    if not model_url:
+        print("MODEL_URL não definido; não vou baixar modelo.")
+        return False
+    os.makedirs(os.path.dirname(model_path), exist_ok=True)
+    try:
+        print(f"Baixando modelo de {model_url} para {model_path} ...")
+        urllib.request.urlretrieve(model_url, model_path)
+        print("Download concluído.")
+        return os.path.exists(model_path)
+    except Exception as e:
+        print(f"Falha ao baixar modelo: {e}")
+        return False
+
+
 def load_cities() -> list[str]:
     fallback = ["São Paulo - SP", "Rio de Janeiro - RJ", "Belo Horizonte - MG", "Curitiba - PR"]
     if not os.path.exists(CIDADES_PATH):
@@ -72,49 +91,98 @@ def load_cities() -> list[str]:
         return fallback
 
 
-app = Flask(__name__)
+def init_app_once():
+    """
+    Inicializa (1x) tudo que pode ser pesado:
+    - baixa modelo
+    - carrega artifacts
+    - carrega catálogo e métricas
+    - cria index de busca vetorial (se possível)
+    """
+    global INIT_DONE, INIT_ERROR, MODEL_PATH, ART, CAT_MAP, METRICS, CITIES, VECTOR_SEARCH
 
-# baixa modelo no deploy
-MODEL_URL = os.environ.get("MODEL_URL")
-ensure_model_downloaded(MODEL_FAST_PATH, MODEL_URL)
+    if INIT_DONE:
+        return
 
-MODEL_PATH = choose_model_path()
-ART = load_artifacts(MODEL_PATH) if MODEL_PATH else None
+    with INIT_LOCK:
+        if INIT_DONE:
+            return
 
-CAT = load_catalog(CATALOGO_PATH) if os.path.exists(CATALOGO_PATH) else None
-CAT_MAP = build_catalog_map(CAT) if CAT is not None else {}
+        try:
+            print("== init_app_once: start ==")
 
-METRICS = _load_json(METRICS_FAST_PATH) or _load_json(METRICS_OLD_PATH)
-CITIES = load_cities()
+            # cities/metrics são leves
+            CITIES = load_cities()
+            METRICS = _load_json(METRICS_FAST_PATH) or _load_json(METRICS_OLD_PATH)
 
-VECTOR_SEARCH = None
-if ART is not None and CAT_MAP:
-    try:
-        classes = get_model_classes(ART)
-        VECTOR_SEARCH = SemanticVectorSearch.from_catalog_map(classes=classes, catalog_map=CAT_MAP)
-        print("Vector search (low-RAM hashing) pronto.")
-    except Exception as e:
-        VECTOR_SEARCH = None
-        print(f"Falha ao criar vector search: {e}")
+            # catálogo
+            if os.path.exists(CATALOGO_PATH):
+                cat = load_catalog(CATALOGO_PATH)
+                CAT_MAP = build_catalog_map(cat)
+            else:
+                CAT_MAP = {}
+
+            # baixa modelo (preferencialmente fast)
+            model_url = os.environ.get("MODEL_URL")
+            ensure_model_downloaded(MODEL_FAST_PATH, model_url)
+
+            # escolhe e carrega modelo
+            MODEL_PATH = choose_model_path()
+            if not MODEL_PATH:
+                raise RuntimeError("Modelo não encontrado. Verifique MODEL_URL ou artifacts/.")
+
+            ART = load_artifacts(MODEL_PATH)
+            print(f"Modelo carregado: {MODEL_PATH}")
+
+            # busca vetorial (pode falhar, não derruba)
+            VECTOR_SEARCH = None
+            if ART is not None and CAT_MAP:
+                try:
+                    classes = get_model_classes(ART)
+                    VECTOR_SEARCH = SemanticVectorSearch.from_catalog_map(classes=classes, catalog_map=CAT_MAP)
+                    print("Vector search pronto.")
+                except Exception as e:
+                    VECTOR_SEARCH = None
+                    print(f"Falha ao criar vector search: {e}")
+
+            INIT_ERROR = None
+            INIT_DONE = True
+            print("== init_app_once: done ==")
+
+        except Exception as e:
+            INIT_ERROR = str(e)
+            INIT_DONE = True  # marca como “tentou”; health mostra erro
+            print(f"== init_app_once: ERROR == {e}")
 
 
+# -----------------------------
+# Routes
+# -----------------------------
 @app.get("/")
 def index():
+    # não força init aqui para não bloquear o boot do Render
+    default_city = "São Paulo - SP"
+    if CITIES:
+        default_city = "São Paulo - SP" if "São Paulo - SP" in CITIES else CITIES[0]
     return render_template(
         "index.html",
         model_loaded=(ART is not None),
         model_path=(MODEL_PATH or ""),
         catalog_loaded=bool(CAT_MAP),
         metrics=(METRICS or {}),
-        cities=CITIES,
-        default_city=("São Paulo - SP" if "São Paulo - SP" in CITIES else (CITIES[0] if CITIES else "")),
+        cities=(CITIES or ["São Paulo - SP"]),
+        default_city=default_city,
     )
 
 
 @app.get("/health")
 def health():
+    # aqui sim fazemos init (Render vai chamar / e /health)
+    init_app_once()
     return jsonify({
         "ok": True,
+        "init_done": INIT_DONE,
+        "init_error": INIT_ERROR,
         "model_loaded": ART is not None,
         "model_path": MODEL_PATH,
         "catalog_loaded": bool(CAT_MAP),
@@ -125,8 +193,11 @@ def health():
 
 @app.post("/recommend")
 def recommend():
+    init_app_once()
+    if INIT_ERROR:
+        return jsonify({"ok": False, "error": f"init failed: {INIT_ERROR}"}), 500
     if ART is None:
-        return jsonify({"ok": False, "error": "model not loaded. Check MODEL_URL / artifacts."}), 500
+        return jsonify({"ok": False, "error": "model not loaded"}), 500
 
     payload = request.get_json(silent=True) or {}
     missing = [k for k in ["idade", "sexo", "cidade", "renda"] if k not in payload]
