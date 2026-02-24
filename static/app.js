@@ -66,6 +66,18 @@ function renderTable(recs) {
   });
 }
 
+async function safeReadResponse(resp) {
+  // Sempre tente ler como texto primeiro
+  const text = await resp.text();
+  if (!text) return { json: null, text: "" };
+
+  try {
+    return { json: JSON.parse(text), text };
+  } catch {
+    return { json: null, text };
+  }
+}
+
 byId("formReco").addEventListener("submit", async (e) => {
   e.preventDefault();
   clearError();
@@ -97,18 +109,26 @@ byId("formReco").addEventListener("submit", async (e) => {
       body: JSON.stringify(payload)
     });
 
-    const data = await resp.json();
-    byId("debugJson").textContent = JSON.stringify(data, null, 2);
+    const { json, text } = await safeReadResponse(resp);
+    byId("debugJson").textContent = json ? JSON.stringify(json, null, 2) : text;
 
-    if (!resp.ok || !data.ok) {
-      showError(data.error || `Erro HTTP ${resp.status}`);
+    if (!resp.ok) {
+      const errMsg = (json && (json.error || json.message)) ? (json.error || json.message) : `Erro HTTP ${resp.status}`;
+      showError(errMsg);
       renderTable([]);
       setMsg("Falhou.", "danger");
       return;
     }
 
-    showNote(data.note || null);
-    renderTable(data.recommendations);
+    if (!json || !json.ok) {
+      showError((json && json.error) ? json.error : "Resposta não-JSON ou inválida do servidor.");
+      renderTable([]);
+      setMsg("Falhou.", "danger");
+      return;
+    }
+
+    showNote(json.note || null);
+    renderTable(json.recommendations);
     setMsg("OK — recomendações geradas.", "success");
   } catch (err) {
     showError(String(err));
