@@ -1,8 +1,7 @@
+flask
 pandas
 numpy
 scikit-learn
-joblib
-streamlit
-flask
-waitress
 scipy
+joblib
+gunicorn
